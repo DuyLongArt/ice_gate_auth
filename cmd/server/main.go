@@ -15,7 +15,7 @@ func main() {
 	// Initialize Store
 	dbStore, err := store.NewStore()
 	if err != nil {
-		log.Fatalf("Failed to initialize database: %v", err)
+		log.Printf("Warning: Failed to initialize database store: %v. Database-dependent endpoints will be unavailable.", err)
 	}
 
 	// Initialize WebAuthn
