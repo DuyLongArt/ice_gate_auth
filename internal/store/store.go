@@ -18,7 +18,7 @@ func NewStore() (*Store, error) {
 	connStr := os.Getenv("DATABASE_URL")
 	if connStr == "" {
 		// Hardcoded fallback for Supabase
-		connStr = "postgresql://postgres:[YOUR-PASSWORD]@db.wthislkepfufkbgiqegs.supabase.co:5432/postgres"
+		connStr = "postgresql://postgres:DuyLongPass@200122@db.wthislkepfufkbgiqegs.supabase.co:5432/postgres"
 	}
 
 	config, err := pgxpool.ParseConfig(connStr)
