@@ -40,7 +40,7 @@ func (h *AuthHandler) BeginRegistration(c *gin.Context) {
 	}
 
 	user := &User{
-		id:          uuid.New().NodeID(), // Temporary ID for registration
+		id:          []byte(body.Email),
 		displayName: body.Email,
 	}
 
@@ -62,8 +62,9 @@ func (h *AuthHandler) BeginRegistration(c *gin.Context) {
 // FinishRegistration verifies the passkey creation
 func (h *AuthHandler) FinishRegistration(c *gin.Context) {
 	var body struct {
-		Email string `json:"email"`
-		Data  any    `json:"data"`
+		Email  string `json:"email"`
+		UserID string `json:"user_id"`
+		Data   any    `json:"data"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
@@ -76,9 +77,9 @@ func (h *AuthHandler) FinishRegistration(c *gin.Context) {
 		return
 	}
 
-	// Reconstruct the user (simplified for this logic)
+	// Reconstruct the user using the same email-based ID
 	user := &User{id: []byte(body.Email), displayName: body.Email}
-	session := webauthn.SessionData{Challenge: challenge}
+	session := webauthn.SessionData{Challenge: challenge, UserID: []byte(body.Email)}
 
 	credential, err := h.WebAuthn.FinishRegistration(user, session, c.Request)
 	if err != nil {
@@ -86,11 +87,17 @@ func (h *AuthHandler) FinishRegistration(c *gin.Context) {
 		return
 	}
 
+	// Parse UserID
+	parsedUserID, err := uuid.Parse(body.UserID)
+	if err != nil {
+		parsedUserID = uuid.New()
+	}
+
 	// Save the credential
 	pubKey := base64.StdEncoding.EncodeToString(credential.PublicKey)
 	credID := base64.StdEncoding.EncodeToString(credential.ID)
 	
-	if err := h.Store.SaveCredential(uuid.New(), body.Email, credID, pubKey); err != nil {
+	if err := h.Store.SaveCredential(parsedUserID, body.Email, credID, pubKey); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save credential"})
 		return
 	}
