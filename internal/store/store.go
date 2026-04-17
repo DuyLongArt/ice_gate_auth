@@ -66,12 +66,12 @@ func (s *Store) DeleteChallenge(email string) error {
 }
 
 // SaveCredential stores a new passkey credential
-func (s *Store) SaveCredential(userID uuid.UUID, credentialID, publicKey string) error {
+func (s *Store) SaveCredential(userID uuid.UUID, email, credentialID, publicKey string) error {
 	query := `
-		INSERT INTO public.user_passkeys (user_id, credential_id, public_key)
-		VALUES ($1, $2, $3)`
+		INSERT INTO public.user_passkeys (user_id, email, credential_id, public_key)
+		VALUES ($1, $2, $3, $4)`
 	
-	_, err := s.Pool.Exec(context.Background(), query, userID, credentialID, publicKey)
+	_, err := s.Pool.Exec(context.Background(), query, userID, email, credentialID, publicKey)
 	return err
 }
 

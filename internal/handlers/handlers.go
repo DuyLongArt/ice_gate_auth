@@ -89,7 +89,7 @@ func (h *AuthHandler) FinishRegistration(c *gin.Context) {
 	pubKey := base64.StdEncoding.EncodeToString(credential.PublicKey)
 	credID := base64.StdEncoding.EncodeToString(credential.ID)
 	
-	if err := h.Store.SaveCredential(uuid.New(), credID, pubKey); err != nil {
+	if err := h.Store.SaveCredential(uuid.New(), body.Email, credID, pubKey); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save credential"})
 		return
 	}
