@@ -9,7 +9,7 @@ import (
 func NewWebAuthn() (*webauthn.WebAuthn, error) {
 	rpID := os.Getenv("RP_ID")
 	if rpID == "" {
-		rpID = "auth.duylong.art"
+		rpID = "passkey.duylong.art"
 	}
 
 	rpOrigin := os.Getenv("RP_ORIGIN")
