@@ -17,7 +17,8 @@ type Store struct {
 func NewStore() (*Store, error) {
 	connStr := os.Getenv("DATABASE_URL")
 	if connStr == "" {
-		return nil, fmt.Errorf("DATABASE_URL environment variable is not set")
+		// Hardcoded fallback for Supabase
+		connStr = "postgresql://postgres:[YOUR-PASSWORD]@db.wthislkepfufkbgiqegs.supabase.co:5432/postgres"
 	}
 
 	config, err := pgxpool.ParseConfig(connStr)
