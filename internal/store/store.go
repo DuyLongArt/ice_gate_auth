@@ -16,8 +16,8 @@ type Store struct {
 func NewStore() (*Store, error) {
 	connStr := os.Getenv("DATABASE_URL")
 	if connStr == "" {
-		// Hardcoded fallback for Supabase
-		connStr = "postgresql://postgres:DuyLongPass@200122@db.wthislkepfufkbgiqegs.supabase.co:5432/postgres"
+		// Corrected fallback: encoded '@' to '%40' and shifted to pooler host (port 6543)
+		connStr = "postgresql://postgres:DuyLongPass%40200122@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres?sslmode=verify-full"
 	}
 
 	config, err := pgxpool.ParseConfig(connStr)
