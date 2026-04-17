@@ -101,11 +101,21 @@ func (h *AuthHandler) FinishRegistration(c *gin.Context) {
 // ServeAASA provides the Apple App Site Association file
 func (h *AuthHandler) ServeAASA(c *gin.Context) {
 	aasa := gin.H{
+		"applinks": gin.H{
+			"details": []gin.H{
+				{
+					"appIDs": []string{"JJ5CR7B87P.duylong.art.icegate"},
+					"components": []gin.H{
+						{"/": "*"},
+					},
+				},
+			},
+		},
 		"webcredentials": gin.H{
 			"apps": []string{"JJ5CR7B87P.duylong.art.icegate"},
 		},
 	}
-	// Important: iOS requires the correct Content-Type without extension
+	// Important: iOS requires the correct Content-Type 
 	c.Header("Content-Type", "application/json")
 	c.JSON(http.StatusOK, aasa)
 }
