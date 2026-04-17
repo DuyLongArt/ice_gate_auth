@@ -16,8 +16,8 @@ type Store struct {
 func NewStore() (*Store, error) {
 	connStr := os.Getenv("DATABASE_URL")
 	if connStr == "" {
-		// Fixed: Added project ID to username so shared pooler knows which project to use
-		connStr = "postgresql://postgres.wthislkepfufkbgigeqs:DuyLongPass%40200122@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres?sslmode=verify-full"
+		// Using the Direct Connection URL for maximum reliability
+		connStr = "postgresql://postgres:DuyLongPass%40200122@db.wthislkepfufkbgigeqs.supabase.co:5432/postgres"
 	}
 
 	config, err := pgxpool.ParseConfig(connStr)
