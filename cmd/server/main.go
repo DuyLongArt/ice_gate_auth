@@ -45,7 +45,8 @@ func main() {
 		c.Next()
 	})
 
-	// Public Endpoints
+	// Public Endpoints (AASA)
+	r.GET("/apple-app-site-association", h.ServeAASA)
 	r.GET("/.well-known/apple-app-site-association", h.ServeAASA)
 
 	// API v1 Endpoints
@@ -57,9 +58,12 @@ func main() {
 		// To be implemented: v1.POST("/login/finish", h.FinishLogin)
 	}
 
-	// Health Check
+	// Health Check with version tagging
 	r.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{"status": "ok"})
+		c.JSON(200, gin.H{
+			"status":  "ok",
+			"version": "1.0.3-aasa-resilient",
+		})
 	})
 
 	port := os.Getenv("PORT")
