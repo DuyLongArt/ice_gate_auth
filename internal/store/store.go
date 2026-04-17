@@ -16,8 +16,8 @@ type Store struct {
 func NewStore() (*Store, error) {
 	connStr := os.Getenv("DATABASE_URL")
 	if connStr == "" {
-		// Corrected fallback: encoded '@' to '%40' and shifted to pooler host (port 6543)
-		connStr = "postgresql://postgres:DuyLongPass%40200122@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres?sslmode=verify-full"
+		// Fixed: Added project ID to username so shared pooler knows which project to use
+		connStr = "postgresql://postgres.wthislkepfufkbgigeqs:DuyLongPass%40200122@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres?sslmode=verify-full"
 	}
 
 	config, err := pgxpool.ParseConfig(connStr)
@@ -37,7 +37,7 @@ func NewStore() (*Store, error) {
 func (s *Store) SaveChallenge(email, challenge string) error {
 	query := `
 		INSERT INTO public.webauthn_challenges (challenge, email, expires_at)
-		VALUES ($1, $2, $3)
+		VALUES ($1, LOWER($2), $3)
 		ON CONFLICT DO NOTHING`
 	
 	expiresAt := time.Now().Add(5 * time.Minute)
@@ -50,7 +50,7 @@ func (s *Store) GetChallenge(email string) (string, error) {
 	var challenge string
 	query := `
 		SELECT challenge FROM public.webauthn_challenges
-		WHERE email = $1 AND expires_at > $2
+		WHERE LOWER(email) = LOWER($1) AND expires_at > $2
 		ORDER BY created_at DESC LIMIT 1`
 	
 	err := s.Pool.QueryRow(context.Background(), query, email, time.Now()).Scan(&challenge)
@@ -59,7 +59,7 @@ func (s *Store) GetChallenge(email string) (string, error) {
 
 // DeleteChallenge removes challenges for an email after use
 func (s *Store) DeleteChallenge(email string) error {
-	query := `DELETE FROM public.webauthn_challenges WHERE email = $1`
+	query := `DELETE FROM public.webauthn_challenges WHERE LOWER(email) = LOWER($1)`
 	_, err := s.Pool.Exec(context.Background(), query, email)
 	return err
 }
@@ -68,7 +68,7 @@ func (s *Store) DeleteChallenge(email string) error {
 func (s *Store) SaveCredential(userID uuid.UUID, email, credentialID, publicKey string) error {
 	query := `
 		INSERT INTO public.user_passkeys (user_id, email, credential_id, public_key)
-		VALUES ($1, $2, $3, $4)`
+		VALUES ($1, LOWER($2), $3, $4)`
 	
 	_, err := s.Pool.Exec(context.Background(), query, userID, email, credentialID, publicKey)
 	return err
@@ -78,7 +78,7 @@ func (s *Store) SaveCredential(userID uuid.UUID, email, credentialID, publicKey 
 func (s *Store) GetCredentialsByEmail(email string) ([]struct{ ID, Key string }, error) {
 	query := `
 		SELECT credential_id, public_key FROM public.user_passkeys
-		WHERE email = $1`
+		WHERE LOWER(email) = LOWER($1)`
 	
 	rows, err := s.Pool.Query(context.Background(), query, email)
 	if err != nil {
