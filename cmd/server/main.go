@@ -54,8 +54,8 @@ func main() {
 	{
 		v1.POST("/register/begin", h.BeginRegistration)
 		v1.POST("/register/finish", h.FinishRegistration)
-		// To be implemented: v1.POST("/login/begin", h.BeginLogin)
-		// To be implemented: v1.POST("/login/finish", h.FinishLogin)
+		v1.POST("/login/begin", h.BeginLogin)
+		v1.POST("/login/finish", h.FinishLogin)
 	}
 
 	// Health Check with version tagging
