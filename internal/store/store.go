@@ -16,8 +16,8 @@ type Store struct {
 func NewStore() (*Store, error) {
 	connStr := os.Getenv("DATABASE_URL")
 	if connStr == "" {
-		// Using the Direct Connection URL for maximum reliability
-		connStr = "postgresql://postgres:DuyLongPass%40200122@db.wthislkepfufkbgigeqs.supabase.co:5432/postgres"
+		// Using the pooler URL with correct password encoding for 'DuyLongPass@200122'
+		connStr = "postgresql://postgres.wthislkepfufkbgiqegs:DuyLongPass%40200122@aws-1-ap-south-1.pooler.supabase.com:6543/postgres?sslmode=require&default_query_exec_mode=simple_protocol"
 	}
 
 	config, err := pgxpool.ParseConfig(connStr)
