@@ -204,6 +204,7 @@ func (h *AuthHandler) FinishLogin(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"token": token,
 		"status": "success",
+		"version": "1.0.1-aligned", // Added for deployment verification
 		"user": gin.H{
 			"email": body.Email,
 		},
@@ -212,22 +213,7 @@ func (h *AuthHandler) FinishLogin(c *gin.Context) {
 
 // ServeAASA provides the Apple App Site Association file
 func (h *AuthHandler) ServeAASA(c *gin.Context) {
-	aasa := gin.H{
-		"applinks": gin.H{
-			"details": []gin.H{
-				{
-					"appIDs": []string{"JJ5CR7B87P.duylong.art.icegate"},
-					"components": []gin.H{
-						{"/": "*"},
-					},
-				},
-			},
-		},
-		"webcredentials": gin.H{
-			"apps": []string{"JJ5CR7B87P.duylong.art.icegate"},
-		},
-	}
 	// Important: iOS requires the correct Content-Type 
-	c.Header("Content-Type", "application/json")
-	c.JSON(http.StatusOK, aasa)
+	// Sending application/json specifically to resolve 1004 verification issues
+	c.Data(http.StatusOK, "application/json; charset=utf-8", []byte(fmt.Sprintf(`{"applinks":{"details":[{"appIDs":["JJ5CR7B87P.duylong.art.icegate"],"components":[{"/":"*"}]}]},"webcredentials":{"apps":["JJ5CR7B87P.duylong.art.icegate"]}}`)))
 }
