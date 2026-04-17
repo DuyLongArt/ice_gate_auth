@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.22-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 # Set the working directory
 WORKDIR /app
@@ -10,6 +10,9 @@ RUN go mod download
 
 # Copy the source code
 COPY . .
+
+# Ensure go.mod is synchronized with the source
+RUN go mod tidy
 
 # Build the application
 # We use CGO_ENABLED=0 to ensure a static binary that runs on alpine/scratch
