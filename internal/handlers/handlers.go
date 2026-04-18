@@ -73,9 +73,9 @@ func (h *AuthHandler) BeginRegistration(c *gin.Context) {
 		return
 	}
 
-	// Store challenge in DB
-	if err := h.Store.SaveChallenge(body.Email, session.Challenge); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to store challenge"})
+	// Store FULL session in DB (contains challenge, userID, etc.)
+	if err := h.Store.SaveSession(body.Email, session); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to store session"})
 		return
 	}
 
@@ -94,15 +94,14 @@ func (h *AuthHandler) FinishRegistration(c *gin.Context) {
 		return
 	}
 
-	challenge, err := h.Store.GetChallenge(body.Email)
+	session, err := h.Store.GetSession(body.Email)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "challenge not found or expired"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "session not found or expired"})
 		return
 	}
 
 	// Reconstruct the user using the SAME UUID-based ID as in BeginRegistration
 	user := &User{id: []byte(body.UserID), displayName: body.Email}
-	session := webauthn.SessionData{Challenge: challenge, UserID: []byte(body.UserID)}
 
 	// Use the library's manual parser since the data is nested
 	dataJSON, err := json.Marshal(body.Data)
@@ -121,7 +120,7 @@ func (h *AuthHandler) FinishRegistration(c *gin.Context) {
 		return
 	}
 
-	credential, err := h.WebAuthn.CreateCredential(user, session, parsedResponse)
+	credential, err := h.WebAuthn.CreateCredential(user, *session, parsedResponse)
 	if err != nil {
 		fmt.Printf("❌ [WebAuthn] Registration Verification Failed: %v\n", err)
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -162,18 +161,11 @@ func (h *AuthHandler) BeginLogin(c *gin.Context) {
 		return
 	}
 
-	// 1. Get credentials and session
+	// 1. Get credentials
 	creds, err := h.Store.GetCredentialsByEmail(body.Email)
 	if err != nil || len(creds) == 0 {
 		fmt.Printf("❌ [WebAuthn] No credentials found for %s\n", body.Email)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "no credentials found for user"})
-		return
-	}
-
-	session, err := h.Store.GetSession(body.Email)
-	if err != nil {
-		fmt.Printf("❌ [WebAuthn] Session retrieval failed for %s: %v\n", body.Email, err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "session expired or invalid"})
 		return
 	}
 
@@ -218,9 +210,9 @@ func (h *AuthHandler) BeginLogin(c *gin.Context) {
 		return
 	}
 
-	// 3. Store challenge in DB
-	if err := h.Store.SaveChallenge(body.Email, session.Challenge); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to store challenge"})
+	// 3. Store FULL session in DB
+	if err := h.Store.SaveSession(body.Email, session); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to store session"})
 		return
 	}
 

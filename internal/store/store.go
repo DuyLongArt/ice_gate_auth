@@ -121,15 +121,16 @@ func (s *Store) SaveSession(email string, session *webauthn.SessionData) error {
 	}
 	
 	query := `
-		INSERT INTO public.webauthn_challenges (email, session_data, expires_at)
-		VALUES (LOWER($1), $2, $3)
+		INSERT INTO public.webauthn_challenges (email, challenge, session_data, expires_at)
+		VALUES (LOWER($1), $2, $3, $4)
 		ON CONFLICT (email) DO UPDATE SET 
+			challenge = EXCLUDED.challenge,
 			session_data = EXCLUDED.session_data,
 			expires_at = EXCLUDED.expires_at,
 			created_at = NOW()`
 	
 	expiresAt := time.Now().Add(10 * time.Minute)
-	_, err = s.Pool.Exec(context.Background(), query, email, data, expiresAt)
+	_, err = s.Pool.Exec(context.Background(), query, email, session.Challenge, data, expiresAt)
 	return err
 }
 
