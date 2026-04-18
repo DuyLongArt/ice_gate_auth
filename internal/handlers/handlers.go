@@ -100,8 +100,9 @@ func (h *AuthHandler) FinishRegistration(c *gin.Context) {
 		return
 	}
 
-	// Reconstruct the user using the SAME UUID-based ID as in BeginRegistration
-	user := &User{id: []byte(body.UserID), displayName: body.Email}
+	// Reconstruct the user using the SAME UUID-based ID (raw 16 bytes)
+	uid, _ := uuid.Parse(body.UserID)
+	user := &User{id: uid[:], displayName: body.Email}
 
 	// Use the library's manual parser since the data is nested
 	dataJSON, err := json.Marshal(body.Data)
