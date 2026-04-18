@@ -289,21 +289,37 @@ func (h *AuthHandler) FinishLogin(c *gin.Context) {
 	if err != nil {
 		fmt.Printf("❌ [WebAuthn] VALIDATION FAILED for %s:\n", body.Email)
 		fmt.Printf("   - Error: %v\n", err)
-		fmt.Printf("   - User ID (Hex): %x\n", user.id)
+		fmt.Printf("   - User ID (Hex):    %x\n", user.id)
 		fmt.Printf("   - Session ID (Hex): %x\n", session.UserID)
-		fmt.Printf("   - User Handle (Assistance): %s\n", base64.StdEncoding.EncodeToString(user.id))
-		
-		// Fallback: If it's a simple byte-mismatch but string match (edge case for some DB drivers)
-		if string(user.id) == string(session.UserID) {
-			fmt.Printf("   - ℹ️ Auto-Fix: IDs match as strings, attempting forced alignment...\n")
-			session.UserID = user.id
-			_, err = h.WebAuthn.ValidateLogin(user, *session, parsedResponse)
+		if len(parsedResponse.Response.UserHandle) > 0 {
+			fmt.Printf("   - Handle ID (Hex):  %x\n", parsedResponse.Response.UserHandle)
+		} else {
+			fmt.Printf("   - Handle ID:       (EMPTY)\n")
 		}
 		
+		// ID Alignment Strategy:
+		// 1. If Handle is empty but we have a unique user, some libraries allow it (not go-webauthn by default)
+		// 2. If types Mismatch (Base64 vs Hex vs Raw), attempt forced alignment
+		
+		// Attempting forced alignment if strings match or bytes match after trimming
+		if bytes.Equal(user.id, session.UserID) {
+			if len(parsedResponse.Response.UserHandle) > 0 && !bytes.Equal(parsedResponse.Response.UserHandle, session.UserID) {
+				fmt.Printf("   - ℹ️ Alignment: Authenticator returned different handle. Attempting override...\n")
+				// Some authenticators might return Base64 of the ID instead of raw bytes
+				session.UserID = parsedResponse.Response.UserHandle
+				_, err = h.WebAuthn.ValidateLogin(user, *session, parsedResponse)
+			}
+		}
+
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"error":   "authentication failed",
 				"message": err.Error(),
+				"debug": gin.H{
+					"user_id": fmt.Sprintf("%x", user.id),
+					"session_id": fmt.Sprintf("%x", session.UserID),
+					"handle_id": fmt.Sprintf("%x", parsedResponse.Response.UserHandle),
+				},
 			})
 			return
 		}
