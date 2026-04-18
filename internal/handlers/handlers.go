@@ -61,21 +61,36 @@ func (h *AuthHandler) BeginRegistration(c *gin.Context) {
 		return
 	}
 
+	// Load existing credentials to prevent duplicate enrollment (excludeCredentials)
+	creds, _ := h.Store.GetCredentialsByEmail(body.Email)
+	var waCreds []webauthn.Credential
+	for _, sc := range creds {
+		id, _ := base64.StdEncoding.DecodeString(sc.ID)
+		key, _ := base64.StdEncoding.DecodeString(sc.Key)
+		waCreds = append(waCreds, webauthn.Credential{
+			ID:        id,
+			PublicKey: key,
+		})
+	}
+
 	user := &User{
 		id:          uid[:], // Raw 16 bytes
 		email:       body.Email,
 		displayName: body.Email,
+		credentials: waCreds,
 	}
 
 	options, session, err := h.WebAuthn.BeginRegistration(user)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		fmt.Printf("❌ [WebAuthn] BeginRegistration Error for %s: %v\n", body.Email, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error(), "details": "Check if RPID or Origin matches configuration"})
 		return
 	}
 
 	// Store FULL session in DB (contains challenge, userID, etc.)
 	if err := h.Store.SaveSession(body.Email, session); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to store session"})
+		fmt.Printf("❌ [WebAuthn] SaveSession Error for %s: %v\n", body.Email, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to store session", "details": err.Error()})
 		return
 	}
 
@@ -287,42 +302,47 @@ func (h *AuthHandler) FinishLogin(c *gin.Context) {
 
 	_, err = h.WebAuthn.ValidateLogin(user, *session, parsedResponse)
 	if err != nil {
-		fmt.Printf("❌ [WebAuthn] VALIDATION FAILED for %s:\n", body.Email)
-		fmt.Printf("   - Error: %v\n", err)
-		fmt.Printf("   - User ID (Hex):    %x\n", user.id)
-		fmt.Printf("   - Session ID (Hex): %x\n", session.UserID)
-		if len(parsedResponse.Response.UserHandle) > 0 {
-			fmt.Printf("   - Handle ID (Hex):  %x\n", parsedResponse.Response.UserHandle)
-		} else {
-			fmt.Printf("   - Handle ID:       (EMPTY)\n")
-		}
+		fmt.Printf("❌ [WebAuthn] VALIDATION ATTEMPT 1 FAILED for %s: %v\n", body.Email, err)
 		
-		// ID Alignment Strategy:
-		// 1. If Handle is empty but we have a unique user, some libraries allow it (not go-webauthn by default)
-		// 2. If types Mismatch (Base64 vs Hex vs Raw), attempt forced alignment
+		// IDENTITY ALIGNMENT STRATEGY (Rescue mission for mismatched encoding):
+		// Some devices might have registered with string-UUIDs instead of binary-UUIDs.
+		handleB := parsedResponse.Response.UserHandle
 		
-		// Attempting forced alignment if strings match or bytes match after trimming
-		if bytes.Equal(user.id, session.UserID) {
-			if len(parsedResponse.Response.UserHandle) > 0 && !bytes.Equal(parsedResponse.Response.UserHandle, session.UserID) {
-				fmt.Printf("   - ℹ️ Alignment: Authenticator returned different handle. Attempting override...\n")
-				// Some authenticators might return Base64 of the ID instead of raw bytes
-				session.UserID = parsedResponse.Response.UserHandle
+		// Strategy A: If Handle is the string representation of our binary ID
+		if len(handleB) > 0 && !bytes.Equal(handleB, user.id) {
+			handleStr := string(handleB)
+			expectedStr := uuid.Must(uuid.FromBytes(user.id)).String()
+			
+			if handleStr == expectedStr {
+				fmt.Printf("   - ℹ️ Alignment: Authenticator used String UUID. Re-validating with String ID...\n")
+				session.UserID = handleB // Align session to authenticator
+				user.id = handleB        // Align user to authenticator
+				_, err = h.WebAuthn.ValidateLogin(user, *session, parsedResponse)
+			} else if len(handleB) == 16 && bytes.Equal(handleB, user.id) {
+				// They match but something else in go-webauthn is being picky
+				session.UserID = handleB
 				_, err = h.WebAuthn.ValidateLogin(user, *session, parsedResponse)
 			}
 		}
 
 		if err != nil {
+			fmt.Printf("❌ [WebAuthn] FINAL VALIDATION FAILED:\n")
+			fmt.Printf("   - User ID (Hex):    %x\n", user.id)
+			fmt.Printf("   - Session ID (Hex): %x\n", session.UserID)
+			fmt.Printf("   - Handle ID (Hex):  %x\n", handleB)
+
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"error":   "authentication failed",
 				"message": err.Error(),
 				"debug": gin.H{
-					"user_id": fmt.Sprintf("%x", user.id),
+					"user_id":    fmt.Sprintf("%x", user.id),
 					"session_id": fmt.Sprintf("%x", session.UserID),
-					"handle_id": fmt.Sprintf("%x", parsedResponse.Response.UserHandle),
+					"handle_id":  fmt.Sprintf("%x", handleB),
 				},
 			})
 			return
 		}
+		fmt.Printf("   - ✅ [WebAuthn] Identity Alignment Successful!\n")
 	}
 
 	// 2. Clean up challenge and issue success
