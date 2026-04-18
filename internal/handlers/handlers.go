@@ -35,15 +35,16 @@ func (u *User) WebAuthnCredentials() []webauthn.Credential { return u.credential
 // BeginRegistration starts the passkey creation flow
 func (h *AuthHandler) BeginRegistration(c *gin.Context) {
 	var body struct {
-		Email string `json:"email"`
+		Email  string `json:"email"`
+		UserID string `json:"user_id"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "email is required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "email and user_id are required"})
 		return
 	}
 
 	user := &User{
-		id:          []byte(body.Email),
+		id:          []byte(body.UserID), // Use UUID as ID for WebAuthn
 		displayName: body.Email,
 	}
 

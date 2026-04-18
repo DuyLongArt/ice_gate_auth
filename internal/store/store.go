@@ -77,10 +77,10 @@ func (s *Store) SaveCredential(userID uuid.UUID, email, credentialID, publicKey 
 	return err
 }
 
-// GetCredentials retrieves all passkeys for an email
-func (s *Store) GetCredentialsByEmail(email string) ([]struct{ ID, Key string }, error) {
+// GetCredentials retrieves all passkeys for an email along with the UserID
+func (s *Store) GetCredentialsByEmail(email string) ([]struct{ ID, Key, UserID string }, error) {
 	query := `
-		SELECT credential_id, public_key FROM public.user_passkeys
+		SELECT credential_id, public_key, user_id FROM public.user_passkeys
 		WHERE LOWER(email) = LOWER($1)`
 	
 	rows, err := s.Pool.Query(context.Background(), query, email)
@@ -89,10 +89,10 @@ func (s *Store) GetCredentialsByEmail(email string) ([]struct{ ID, Key string },
 	}
 	defer rows.Close()
 
-	var creds []struct{ ID, Key string }
+	var creds []struct{ ID, Key, UserID string }
 	for rows.Next() {
-		var c struct{ ID, Key string }
-		if err := rows.Scan(&c.ID, &c.Key); err != nil {
+		var c struct{ ID, Key, UserID string }
+		if err := rows.Scan(&c.ID, &c.Key, &c.UserID); err != nil {
 			return nil, err
 		}
 		creds = append(creds, c)
