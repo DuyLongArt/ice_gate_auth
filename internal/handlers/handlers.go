@@ -225,7 +225,10 @@ func (h *AuthHandler) FinishLogin(c *gin.Context) {
 		credentials: waCreds,
 	}
 
-	session := webauthn.SessionData{Challenge: challenge}
+	session := webauthn.SessionData{
+		Challenge: challenge,
+		UserID:    []byte(creds[0].UserID),
+	}
 
 	// Use the library's manual parser since the data is nested
 	dataJSON, err := json.Marshal(body.Data)
@@ -258,7 +261,7 @@ func (h *AuthHandler) FinishLogin(c *gin.Context) {
 	h.Store.DeleteChallenge(body.Email)
 	
 	// Log the login event
-	h.Store.LogPasskeyEvent(body.Email, body.Email, "login", "Successful passkey authentication")
+	h.Store.LogPasskeyEvent(body.Email, creds[0].UserID, "login", "Successful passkey authentication")
 	
 	// Create a mock JWT for now (In real app, integrate with your auth system)
 	token := fmt.Sprintf("passkey_jwt_%s", uuid.New().String())
