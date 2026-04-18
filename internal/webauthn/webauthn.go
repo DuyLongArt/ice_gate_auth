@@ -20,7 +20,12 @@ func NewWebAuthn() (*webauthn.WebAuthn, error) {
 	wconfig := &webauthn.Config{
 		RPDisplayName: "Ice Gate",
 		RPID:          rpID,
-		RPOrigins:     []string{rpOrigin, "ios:JJ5CR7B87P.duylong.art.icegate"},
+		RPOrigins: []string{
+			rpOrigin,
+			"https://" + rpID,
+			"ios:JJ5CR7B87P.duylong.art.icegate",
+			"apple-app-site-association", // Some libraries use this as a placeholder
+		},
 	}
 
 	return webauthn.New(wconfig)

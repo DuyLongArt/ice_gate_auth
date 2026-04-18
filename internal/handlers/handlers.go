@@ -83,7 +83,11 @@ func (h *AuthHandler) FinishRegistration(c *gin.Context) {
 
 	credential, err := h.WebAuthn.FinishRegistration(user, session, c.Request)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "verification failed", "details": err.Error()})
+		fmt.Printf("❌ [WebAuthn] Registration Verification Failed: %v\n", err)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "verification failed",
+			"details": err.Error(),
+		})
 		return
 	}
 
