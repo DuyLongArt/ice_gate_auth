@@ -272,5 +272,5 @@ func (h *AuthHandler) FinishLogin(c *gin.Context) {
 func (h *AuthHandler) ServeAASA(c *gin.Context) {
 	// Important: iOS requires the correct Content-Type 
 	// Sending application/json specifically to resolve 1004 verification issues
-	c.Data(http.StatusOK, "application/json; charset=utf-8", []byte(fmt.Sprintf(`{"applinks":{"details":[{"appIDs":["JJ5CR7B87P.duylong.art.icegate"],"components":[{"/":"*"}]}]},"webcredentials":{"apps":["JJ5CR7B87P.duylong.art.icegate"]}}`)))
+	c.Data(http.StatusOK, "application/json; charset=utf-8", []byte(`{"applinks":{"details":[{"appIDs":["JJ5CR7B87P.duylong.art.icegate"],"components":[{"/":"*"}]}]},"webcredentials":{"apps":["JJ5CR7B87P.duylong.art.icegate"]}}`))
 }
