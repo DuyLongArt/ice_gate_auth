@@ -244,8 +244,12 @@ func (h *AuthHandler) FinishLogin(c *gin.Context) {
 
 	_, err = h.WebAuthn.ValidateLogin(user, session, parsedResponse)
 	if err != nil {
-		fmt.Printf("❌ [WebAuthn] Login Verification Failed: %v\n", err)
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication failed", "details": err.Error()})
+		fmt.Printf("❌ [WebAuthn] Login Verification Failed for %s: %v\n", body.Email, err)
+		// Print more details about the error to help debug 401
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error":   "authentication failed",
+			"message": err.Error(),
+		})
 		return
 	}
 
