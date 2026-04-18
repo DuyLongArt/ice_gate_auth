@@ -31,12 +31,13 @@ func normalizeBase64(input string) string {
 // User represents a WebAuthn user
 type User struct {
 	id          []byte
+	email       string
 	displayName string
 	credentials []webauthn.Credential
 }
 
 func (u *User) WebAuthnID() []byte { return u.id }
-func (u *User) WebAuthnName() string { return u.displayName }
+func (u *User) WebAuthnName() string { return u.email }
 func (u *User) WebAuthnDisplayName() string { return u.displayName }
 func (u *User) WebAuthnIcon() string { return "" }
 func (u *User) WebAuthnCredentials() []webauthn.Credential { return u.credentials }
@@ -273,14 +274,24 @@ func (h *AuthHandler) FinishLogin(c *gin.Context) {
 	if err != nil {
 		fmt.Printf("❌ [WebAuthn] VALIDATION FAILED for %s:\n", body.Email)
 		fmt.Printf("   - Error: %v\n", err)
-		fmt.Printf("   - User Handle: %s\n", base64.StdEncoding.EncodeToString(user.id))
-		fmt.Printf("   - Expected ID: %s\n", base64.StdEncoding.EncodeToString(waCreds[0].ID))
+		fmt.Printf("   - User ID (Hex): %x\n", user.id)
+		fmt.Printf("   - Session ID (Hex): %x\n", session.UserID)
+		fmt.Printf("   - User Handle (Assistance): %s\n", base64.StdEncoding.EncodeToString(user.id))
 		
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error":   "authentication failed",
-			"message": err.Error(),
-		})
-		return
+		// Fallback: If it's a simple byte-mismatch but string match (edge case for some DB drivers)
+		if string(user.id) == string(session.UserID) {
+			fmt.Printf("   - ℹ️ Auto-Fix: IDs match as strings, attempting forced alignment...\n")
+			session.UserID = user.id
+			_, err = h.WebAuthn.ValidateLogin(user, session, parsedResponse)
+		}
+		
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error":   "authentication failed",
+				"message": err.Error(),
+			})
+			return
+		}
 	}
 
 	// 2. Clean up challenge and issue success

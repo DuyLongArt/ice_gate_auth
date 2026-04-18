@@ -4,7 +4,9 @@ import (
 	"context"
 	"os"
 	"time"
+	"encoding/json"
 
+	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -81,7 +83,8 @@ func (s *Store) SaveCredential(userID uuid.UUID, email, credentialID, publicKey 
 func (s *Store) GetCredentialsByEmail(email string) ([]struct{ ID, Key, UserID string }, error) {
 	query := `
 		SELECT credential_id, public_key, user_id FROM public.user_passkeys
-		WHERE LOWER(email) = LOWER($1)`
+		WHERE LOWER(email) = LOWER($1)
+		ORDER BY created_at DESC`
 	
 	rows, err := s.Pool.Query(context.Background(), query, email)
 	if err != nil {
@@ -108,4 +111,44 @@ func (s *Store) LogPasskeyEvent(email, personID, eventType, metadata string) err
 	
 	_, err := s.Pool.Exec(context.Background(), query, email, personID, eventType, metadata)
 	return err
+}
+
+// SaveSession stores the WebAuthn session data as JSON
+func (s *Store) SaveSession(email string, session *webauthn.SessionData) error {
+	data, err := json.Marshal(session)
+	if err != nil {
+		return err
+	}
+	
+	query := `
+		INSERT INTO public.webauthn_challenges (email, session_data, expires_at)
+		VALUES (LOWER($1), $2, $3)
+		ON CONFLICT (email) DO UPDATE SET 
+			session_data = EXCLUDED.session_data,
+			expires_at = EXCLUDED.expires_at,
+			created_at = NOW()`
+	
+	expiresAt := time.Now().Add(10 * time.Minute)
+	_, err = s.Pool.Exec(context.Background(), query, email, data, expiresAt)
+	return err
+}
+
+// GetSession retrieves and deserializes the WebAuthn session data
+func (s *Store) GetSession(email string) (*webauthn.SessionData, error) {
+	var data []byte
+	query := `
+		SELECT session_data FROM public.webauthn_challenges
+		WHERE LOWER(email) = LOWER($1) AND expires_at > $2
+		ORDER BY created_at DESC LIMIT 1`
+	
+	err := s.Pool.QueryRow(context.Background(), query, email, time.Now()).Scan(&data)
+	if err != nil {
+		return nil, err
+	}
+	
+	var session webauthn.SessionData
+	if err := json.Unmarshal(data, &session); err != nil {
+		return nil, err
+	}
+	return &session, nil
 }
