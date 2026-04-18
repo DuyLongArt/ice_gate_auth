@@ -7,8 +7,11 @@ import (
 
 	"ice_gate_auth/internal/store"
 	"github.com/gin-gonic/gin"
+	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/google/uuid"
+	"encoding/json"
+	"bytes"
 )
 
 type AuthHandler struct {
@@ -81,7 +84,22 @@ func (h *AuthHandler) FinishRegistration(c *gin.Context) {
 	user := &User{id: []byte(body.Email), displayName: body.Email}
 	session := webauthn.SessionData{Challenge: challenge, UserID: []byte(body.Email)}
 
-	credential, err := h.WebAuthn.FinishRegistration(user, session, c.Request)
+	// Use the library's manual parser since the data is nested
+	dataJSON, err := json.Marshal(body.Data)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to encode registration data"})
+		return
+	}
+
+	// Create a mock request with the nested data body for the parser
+	parsedResponse, err := protocol.ParseCredentialCreationResponse(bytes.NewReader(dataJSON))
+	if err != nil {
+		fmt.Printf("❌ [WebAuthn] Parse Registration Error: %v\n", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Parse error for Registration", "details": err.Error()})
+		return
+	}
+
+	credential, err := h.WebAuthn.CreateCredential(user, session, parsedResponse)
 	if err != nil {
 		fmt.Printf("❌ [WebAuthn] Registration Verification Failed: %v\n", err)
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -206,8 +224,23 @@ func (h *AuthHandler) FinishLogin(c *gin.Context) {
 
 	session := webauthn.SessionData{Challenge: challenge}
 
-	_, err = h.WebAuthn.FinishLogin(user, session, c.Request)
+	// Use the library's manual parser since the data is nested
+	dataJSON, err := json.Marshal(body.Data)
 	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to encode login data"})
+		return
+	}
+
+	parsedResponse, err := protocol.ParseCredentialRequestResponse(bytes.NewReader(dataJSON))
+	if err != nil {
+		fmt.Printf("❌ [WebAuthn] Parse Login Error: %v\n", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Parse error for Login", "details": err.Error()})
+		return
+	}
+
+	_, err = h.WebAuthn.ValidateLogin(user, session, parsedResponse)
+	if err != nil {
+		fmt.Printf("❌ [WebAuthn] Login Verification Failed: %v\n", err)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication failed", "details": err.Error()})
 		return
 	}
