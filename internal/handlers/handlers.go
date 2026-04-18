@@ -92,7 +92,9 @@ func (h *AuthHandler) FinishRegistration(c *gin.Context) {
 	}
 
 	// Create a mock request with the nested data body for the parser
-	parsedResponse, err := protocol.ParseCredentialCreationResponse(bytes.NewReader(dataJSON))
+	req, _ := http.NewRequest("POST", "/", bytes.NewReader(dataJSON))
+	req.Header.Set("Content-Type", "application/json")
+	parsedResponse, err := protocol.ParseCredentialCreationResponse(req)
 	if err != nil {
 		fmt.Printf("❌ [WebAuthn] Parse Registration Error: %v\n", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Parse error for Registration", "details": err.Error()})
@@ -231,7 +233,9 @@ func (h *AuthHandler) FinishLogin(c *gin.Context) {
 		return
 	}
 
-	parsedResponse, err := protocol.ParseCredentialRequestResponse(bytes.NewReader(dataJSON))
+	req, _ := http.NewRequest("POST", "/", bytes.NewReader(dataJSON))
+	req.Header.Set("Content-Type", "application/json")
+	parsedResponse, err := protocol.ParseCredentialRequestResponse(req)
 	if err != nil {
 		fmt.Printf("❌ [WebAuthn] Parse Login Error: %v\n", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Parse error for Login", "details": err.Error()})
