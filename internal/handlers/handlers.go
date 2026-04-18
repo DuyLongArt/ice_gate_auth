@@ -102,6 +102,9 @@ func (h *AuthHandler) FinishRegistration(c *gin.Context) {
 		return
 	}
 
+	// Log the registration event
+	h.Store.LogPasskeyEvent(body.Email, parsedUserID.String(), "registration", "Successful passkey enrollment")
+
 	h.Store.DeleteChallenge(body.Email)
 	c.JSON(http.StatusOK, gin.H{"status": "success"})
 }
@@ -118,6 +121,9 @@ func (h *AuthHandler) BeginLogin(c *gin.Context) {
 	// 1. Fetch user credentials from DB
 	creds, err := h.Store.GetCredentialsByEmail(body.Email)
 	if err != nil || len(creds) == 0 {
+		// Log the failed lookup attempt
+		h.Store.LogPasskeyEvent(body.Email, "unknown", "login_failed", "User attempted login but no passkey found")
+		
 		c.JSON(http.StatusNotFound, gin.H{"error": "user not found or no passkeys registered"})
 		return
 	}
@@ -204,6 +210,9 @@ func (h *AuthHandler) FinishLogin(c *gin.Context) {
 
 	// 2. Clean up challenge and issue success
 	h.Store.DeleteChallenge(body.Email)
+	
+	// Log the login event
+	h.Store.LogPasskeyEvent(body.Email, body.Email, "login", "Successful passkey authentication")
 	
 	// Create a mock JWT for now (In real app, integrate with your auth system)
 	token := fmt.Sprintf("passkey_jwt_%s", uuid.New().String())

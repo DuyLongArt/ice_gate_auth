@@ -96,3 +96,13 @@ func (s *Store) GetCredentialsByEmail(email string) ([]struct{ ID, Key string },
 	}
 	return creds, nil
 }
+
+// LogPasskeyEvent records an authentication event in the database
+func (s *Store) LogPasskeyEvent(email, personID, eventType, metadata string) error {
+	query := `
+		INSERT INTO public.auth_logs (email, person_id, event_type, metadata)
+		VALUES (LOWER($1), $2, $3, $4)`
+	
+	_, err := s.Pool.Exec(context.Background(), query, email, personID, eventType, metadata)
+	return err
+}
