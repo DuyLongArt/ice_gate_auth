@@ -81,9 +81,9 @@ func (h *AuthHandler) FinishRegistration(c *gin.Context) {
 		return
 	}
 
-	// Reconstruct the user using the same email-based ID
-	user := &User{id: []byte(body.Email), displayName: body.Email}
-	session := webauthn.SessionData{Challenge: challenge, UserID: []byte(body.Email)}
+	// Reconstruct the user using the SAME UUID-based ID as in BeginRegistration
+	user := &User{id: []byte(body.UserID), displayName: body.Email}
+	session := webauthn.SessionData{Challenge: challenge, UserID: []byte(body.UserID)}
 
 	// Use the library's manual parser since the data is nested
 	dataJSON, err := json.Marshal(body.Data)
@@ -165,7 +165,7 @@ func (h *AuthHandler) BeginLogin(c *gin.Context) {
 	}
 
 	user := &User{
-		id:          []byte(body.Email),
+		id:          []byte(creds[0].UserID),
 		displayName: body.Email,
 		credentials: waCreds,
 	}
@@ -220,7 +220,7 @@ func (h *AuthHandler) FinishLogin(c *gin.Context) {
 	}
 
 	user := &User{
-		id:          []byte(body.Email),
+		id:          []byte(creds[0].UserID),
 		displayName: body.Email,
 		credentials: waCreds,
 	}
@@ -266,7 +266,7 @@ func (h *AuthHandler) FinishLogin(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"token": token,
 		"status": "success",
-		"version": "1.0.1-aligned", // Added for deployment verification
+		"version": "1.0.2-uuid", // Updated to verify ID alignment deployment
 		"user": gin.H{
 			"email": body.Email,
 		},
