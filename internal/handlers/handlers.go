@@ -53,8 +53,17 @@ func (h *AuthHandler) BeginRegistration(c *gin.Context) {
 		return
 	}
 
+	// Convert UUID string to raw bytes for standard WebAuthn compliance
+	uid, err := uuid.Parse(body.UserID)
+	if err != nil {
+		fmt.Printf("❌ [WebAuthn] Invalid UserID format: %v\n", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id format"})
+		return
+	}
+
 	user := &User{
-		id:          []byte(body.UserID), // Use UUID as ID for WebAuthn
+		id:          uid[:], // Raw 16 bytes
+		email:       body.Email,
 		displayName: body.Email,
 	}
 
@@ -188,9 +197,18 @@ func (h *AuthHandler) BeginLogin(c *gin.Context) {
 		})
 	}
 
+	// Use raw binary comparison for ID search
+	uid, err := uuid.Parse(creds[0].UserID)
+	if err != nil {
+		fmt.Printf("❌ [WebAuthn] Invalid UserID in DB for %s: %v\n", body.Email, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database identity corruption"})
+		return
+	}
+
 	user := &User{
-		id:          []byte(creds[0].UserID),
+		id:          uid[:],
 		email:       body.Email,
+		displayName: body.Email,
 		credentials: waCreds,
 	}
 
@@ -220,12 +238,6 @@ func (h *AuthHandler) FinishLogin(c *gin.Context) {
 		return
 	}
 
-	challenge, err := h.Store.GetChallenge(body.Email)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "challenge not found or expired"})
-		return
-	}
-
 	// 1. Fetch user credentials again for verification
 	creds, err := h.Store.GetCredentialsByEmail(body.Email)
 	if err != nil {
@@ -243,15 +255,25 @@ func (h *AuthHandler) FinishLogin(c *gin.Context) {
 		})
 	}
 
+	uid, err := uuid.Parse(creds[0].UserID)
+	if err != nil {
+		fmt.Printf("❌ [WebAuthn] Invalid UserID in DB for %s: %v\n", body.Email, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database identity corruption"})
+		return
+	}
+
 	user := &User{
-		id:          []byte(creds[0].UserID),
-		displayName: body.Email,
+		id:          uid[:],
+		email:       body.Email,
 		credentials: waCreds,
 	}
 
-	session := webauthn.SessionData{
-		Challenge: challenge,
-		UserID:    []byte(creds[0].UserID),
+	// Retrieve session from Store (using the new robust GetSession)
+	session, err := h.Store.GetSession(body.Email)
+	if err != nil {
+		fmt.Printf("❌ [WebAuthn] Session expired or missing for %s\n", body.Email)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "session expired or invalid"})
+		return
 	}
 
 	// Use the library's manual parser since the data is nested
@@ -270,7 +292,7 @@ func (h *AuthHandler) FinishLogin(c *gin.Context) {
 		return
 	}
 
-	_, err = h.WebAuthn.ValidateLogin(user, session, parsedResponse)
+	_, err = h.WebAuthn.ValidateLogin(user, *session, parsedResponse)
 	if err != nil {
 		fmt.Printf("❌ [WebAuthn] VALIDATION FAILED for %s:\n", body.Email)
 		fmt.Printf("   - Error: %v\n", err)
@@ -282,7 +304,7 @@ func (h *AuthHandler) FinishLogin(c *gin.Context) {
 		if string(user.id) == string(session.UserID) {
 			fmt.Printf("   - ℹ️ Auto-Fix: IDs match as strings, attempting forced alignment...\n")
 			session.UserID = user.id
-			_, err = h.WebAuthn.ValidateLogin(user, session, parsedResponse)
+			_, err = h.WebAuthn.ValidateLogin(user, *session, parsedResponse)
 		}
 		
 		if err != nil {
