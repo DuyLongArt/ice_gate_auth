@@ -2,9 +2,10 @@ package store
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"os"
 	"time"
-	"encoding/json"
 
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/google/uuid"
@@ -122,7 +123,7 @@ func (s *Store) SaveSession(email string, session *webauthn.SessionData) error {
 	
 	query := `
 		INSERT INTO public.webauthn_challenges (email, challenge, session_data, expires_at)
-		VALUES (LOWER($1), $2, $3, $4)
+		VALUES (LOWER($1), $2, $3::jsonb, $4)
 		ON CONFLICT (email) DO UPDATE SET 
 			challenge = EXCLUDED.challenge,
 			session_data = EXCLUDED.session_data,
@@ -130,6 +131,11 @@ func (s *Store) SaveSession(email string, session *webauthn.SessionData) error {
 			created_at = NOW()`
 	
 	expiresAt := time.Now().Add(10 * time.Minute)
+	
+	// Debug logging for JSON error
+	fmt.Printf("📝 [Store] Saving Session for %s:\n", email)
+	fmt.Printf("   - JSON Data: %s\n", string(data))
+	
 	_, err = s.Pool.Exec(context.Background(), query, email, session.Challenge, data, expiresAt)
 	return err
 }
