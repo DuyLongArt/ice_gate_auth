@@ -136,7 +136,8 @@ func (s *Store) SaveSession(email string, session *webauthn.SessionData) error {
 	fmt.Printf("📝 [Store] Saving Session for %s:\n", email)
 	fmt.Printf("   - JSON Data: %s\n", string(data))
 	
-	_, err = s.Pool.Exec(context.Background(), query, email, session.Challenge, data, expiresAt)
+	// Pass data as string to ensure Postgres interprets it as valid JSON text
+	_, err = s.Pool.Exec(context.Background(), query, email, session.Challenge, string(data), expiresAt)
 	return err
 }
 
