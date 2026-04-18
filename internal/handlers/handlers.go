@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"ice_gate_auth/internal/store"
 	"github.com/gin-gonic/gin"
@@ -17,6 +18,14 @@ import (
 type AuthHandler struct {
 	Store    *store.Store
 	WebAuthn *webauthn.WebAuthn
+}
+
+// normalizeBase64 handles both Standard and URL-Safe Base64
+func normalizeBase64(input string) string {
+	s := input
+	s = strings.ReplaceAll(s, "-", "+")
+	s = strings.ReplaceAll(s, "_", "/")
+	return s
 }
 
 // User represents a WebAuthn user
@@ -143,21 +152,35 @@ func (h *AuthHandler) BeginLogin(c *gin.Context) {
 		return
 	}
 
-	// 1. Fetch user credentials from DB
+	// 1. Get credentials and session
 	creds, err := h.Store.GetCredentialsByEmail(body.Email)
 	if err != nil || len(creds) == 0 {
-		// Log the failed lookup attempt
-		h.Store.LogPasskeyEvent(body.Email, "unknown", "login_failed", "User attempted login but no passkey found")
-		
-		c.JSON(http.StatusNotFound, gin.H{"error": "user not found or no passkeys registered"})
+		fmt.Printf("❌ [WebAuthn] No credentials found for %s\n", body.Email)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "no credentials found for user"})
+		return
+	}
+
+	session, err := h.Store.GetSession(body.Email)
+	if err != nil {
+		fmt.Printf("❌ [WebAuthn] Session retrieval failed for %s: %v\n", body.Email, err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "session expired or invalid"})
 		return
 	}
 
 	// 2. Map to WebAuthn credentials
 	var waCreds []webauthn.Credential
 	for _, sc := range creds {
-		id, _ := base64.StdEncoding.DecodeString(sc.ID)
-		key, _ := base64.StdEncoding.DecodeString(sc.Key)
+		// Use a more robust decoding strategy
+		id, err := base64.RawURLEncoding.DecodeString(normalizeBase64(sc.ID))
+		if err != nil {
+			id, _ = base64.StdEncoding.DecodeString(sc.ID)
+		}
+		
+		key, err := base64.RawURLEncoding.DecodeString(normalizeBase64(sc.Key))
+		if err != nil {
+			key, _ = base64.StdEncoding.DecodeString(sc.Key)
+		}
+
 		waCreds = append(waCreds, webauthn.Credential{
 			ID:        id,
 			PublicKey: key,
@@ -166,7 +189,7 @@ func (h *AuthHandler) BeginLogin(c *gin.Context) {
 
 	user := &User{
 		id:          []byte(creds[0].UserID),
-		displayName: body.Email,
+		email:       body.Email,
 		credentials: waCreds,
 	}
 
@@ -248,8 +271,11 @@ func (h *AuthHandler) FinishLogin(c *gin.Context) {
 
 	_, err = h.WebAuthn.ValidateLogin(user, session, parsedResponse)
 	if err != nil {
-		fmt.Printf("❌ [WebAuthn] Login Verification Failed for %s: %v\n", body.Email, err)
-		// Print more details about the error to help debug 401
+		fmt.Printf("❌ [WebAuthn] VALIDATION FAILED for %s:\n", body.Email)
+		fmt.Printf("   - Error: %v\n", err)
+		fmt.Printf("   - User Handle: %s\n", base64.StdEncoding.EncodeToString(user.id))
+		fmt.Printf("   - Expected ID: %s\n", base64.StdEncoding.EncodeToString(waCreds[0].ID))
+		
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"error":   "authentication failed",
 			"message": err.Error(),
