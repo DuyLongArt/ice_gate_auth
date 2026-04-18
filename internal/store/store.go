@@ -38,7 +38,10 @@ func (s *Store) SaveChallenge(email, challenge string) error {
 	query := `
 		INSERT INTO public.webauthn_challenges (challenge, email, expires_at)
 		VALUES ($1, LOWER($2), $3)
-		ON CONFLICT DO NOTHING`
+		ON CONFLICT (email) DO UPDATE SET 
+			challenge = EXCLUDED.challenge, 
+			expires_at = EXCLUDED.expires_at,
+			created_at = NOW()`
 	
 	expiresAt := time.Now().Add(5 * time.Minute)
 	_, err := s.Pool.Exec(context.Background(), query, challenge, email, expiresAt)
