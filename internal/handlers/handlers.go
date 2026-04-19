@@ -305,22 +305,47 @@ func (h *AuthHandler) FinishLogin(c *gin.Context) {
 		fmt.Printf("❌ [WebAuthn] VALIDATION ATTEMPT 1 FAILED for %s: %v\n", body.Email, err)
 		
 		// IDENTITY ALIGNMENT STRATEGY (Rescue mission for mismatched encoding):
-		// Some devices might have registered with string-UUIDs instead of binary-UUIDs.
+		// Some devices return the userHandle as a string (UUID or Base64) instead of binary.
 		handleB := parsedResponse.Response.UserHandle
 		
-		// Strategy A: If Handle is the string representation of our binary ID
 		if len(handleB) > 0 && !bytes.Equal(handleB, user.id) {
 			handleStr := string(handleB)
-			expectedStr := uuid.Must(uuid.FromBytes(user.id)).String()
+			expectedIDHex := fmt.Sprintf("%x", user.id)
 			
-			if handleStr == expectedStr {
-				fmt.Printf("   - ℹ️ Alignment: Authenticator used String UUID. Re-validating with String ID...\n")
-				session.UserID = handleB // Align session to authenticator
-				user.id = handleB        // Align user to authenticator
-				_, err = h.WebAuthn.ValidateLogin(user, *session, parsedResponse)
-			} else if len(handleB) == 16 && bytes.Equal(handleB, user.id) {
-				// They match but something else in go-webauthn is being picky
-				session.UserID = handleB
+			fmt.Printf("   - 🔍 Investigating mismatch:\n")
+			fmt.Printf("     - Expected ID (Hex):   %s\n", expectedIDHex)
+			fmt.Printf("     - Received Handle (Hex): %x\n", handleB)
+			fmt.Printf("     - Received Handle (Str): %s\n", handleStr)
+
+			var alignedID []byte
+
+			// Case 1: Handle is a String UUID (with-dashes)
+			if u, err := uuid.Parse(handleStr); err == nil && bytes.Equal(u[:], user.id) {
+				fmt.Printf("   - ℹ️ Alignment: Authenticator used String UUID.\n")
+				alignedID = handleB
+			} else {
+				// Case 2: Handle is Base64 or Base64URL encoded version of our binary ID
+				// Try various base64 variants
+				variants := []func(string) ([]byte, error){
+					func(s string) ([]byte, error) { return base64.StdEncoding.DecodeString(normalizeBase64(s)) },
+					func(s string) ([]byte, error) { return base64.URLEncoding.DecodeString(s) },
+					func(s string) ([]byte, error) { return base64.RawURLEncoding.DecodeString(s) },
+					func(s string) ([]byte, error) { return base64.RawStdEncoding.DecodeString(normalizeBase64(s)) },
+				}
+
+				for i, decode := range variants {
+					if decoded, err := decode(handleStr); err == nil && bytes.Equal(decoded, user.id) {
+						fmt.Printf("   - ℹ️ Alignment: Authenticator used Base64 Variant %d.\n", i+1)
+						alignedID = handleB
+						break
+					}
+				}
+			}
+
+			if alignedID != nil {
+				fmt.Printf("   - ✅ Alignment successful! Re-validating...\n")
+				session.UserID = alignedID
+				user.id = alignedID
 				_, err = h.WebAuthn.ValidateLogin(user, *session, parsedResponse)
 			}
 		}
@@ -342,7 +367,7 @@ func (h *AuthHandler) FinishLogin(c *gin.Context) {
 			})
 			return
 		}
-		fmt.Printf("   - ✅ [WebAuthn] Identity Alignment Successful!\n")
+		fmt.Printf("   - ✅ [WebAuthn] Identity Alignment Permitted Successful Login!\n")
 	}
 
 	// 2. Clean up challenge and issue success
